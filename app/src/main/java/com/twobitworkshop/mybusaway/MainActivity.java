@@ -53,114 +53,88 @@ public class MainActivity extends AppCompatActivity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mRequestingLocationUpdates = false;
-        createLocationRequest();
+        mLocationRequest = new LocationRequest();
+        mRequestingLocationUpdates = true;
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        mLocationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(LocationResult locationResult) {
+                if (locationResult == null) {
+                    return;
+                }
+                for (Location location : locationResult.getLocations()) {
+                    // Update UI with location data
+                    // ...
+                }
+            }
+        };
+
+        startLocationUpdates();
+
+        if (checkPermission()) {
+            mFusedLocationClient.getLastLocation()
+                    .addOnSuccessListener(this, new OnSuccessListener<Location>() {
+                        @Override
+                        public void onSuccess(Location l) {
+                            // Got last known location. In some rare situations this can be null.
+                            if (l != null) {
+                                // Logic to handle location object
+                                location = l;
+                            }
+                        }
+                    });
+        }
 
         btnHit = (Button) findViewById(R.id.btnHit);
         btnHit.setOnClickListener(new View.OnClickListener()
         {
             @Override
-            public void onClick(View v) {
-                updateLocation(new AfterLocationUpdate()
-                {
-                    @Override
-                    public void OnUpdate() {
-                        String url = "https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json";
-                        url += "?key=" + getString(R.string.oba_api_key);
-                        url += "&lat=" + location.getLatitude() + "&lon=" + location.getLongitude();
-                        new JsonTask().execute(url);
-                    }
-                });
+            public void onClick(View v)
+            {
+                    String url = "https://api.pugetsound.onebusaway.org/api/where/stops-for-location.json";
+                    url += "?key=" + getString(R.string.oba_api_key);
+                    url += "&lat=" + location.getLatitude() + "&lon=" + location.getLongitude();
+                    new JsonTask().execute(url);
             }
         });
     }
 
     @Override
-    protected void onResume()
-    {
+    protected void onPause() {
+        super.onPause();
+        stopLocationUpdates();
+    }
+
+    @Override
+    protected void onResume() {
         super.onResume();
         if (mRequestingLocationUpdates) {
             startLocationUpdates();
         }
     }
 
-    @Override
-    protected void onPause()
-    {
-        super.onPause();
-        stopLocationUpdates();
+    private void startLocationUpdates() {
+        if (checkPermission()) {
+            mFusedLocationClient.requestLocationUpdates(mLocationRequest,
+                    mLocationCallback,
+                    null /* Looper */);
+        }
     }
 
-    private void stopLocationUpdates()
-    {
+    private void stopLocationUpdates() {
         mFusedLocationClient.removeLocationUpdates(mLocationCallback);
     }
 
-    private void startLocationUpdates()
+    public boolean checkPermission()
     {
-        checkPermission();
-        mFusedLocationClient.requestLocationUpdates(mLocationRequest, mLocationCallback,null);
-    }
-
-    protected void createLocationRequest()
-    {
-        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
-        mLocationRequest = new LocationRequest();
-        mLocationRequest.setInterval(10000);
-        mLocationRequest.setFastestInterval(5000);
-        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
-
-        mLocationCallback = new LocationCallback() {
-            @Override
-            public void onLocationResult(LocationResult locationResult)
-            {
-                Log.d("MBA", "Location Result Callback");
-                if (locationResult == null) {
-                    return;
-                }
-                for (Location l : locationResult.getLocations()) {
-                    location = l;
-                }
-            }
-        };
-
-        if (mRequestingLocationUpdates) {
-            startLocationUpdates();
-        }
-    }
-
-    public void updateLocation(final AfterLocationUpdate a)
-    {
-        Log.d("MBA", "Update Location");
-        checkPermission();
-        mFusedLocationClient.getLastLocation()
-            .addOnSuccessListener(this, new OnSuccessListener<Location>()
-            {
-                @Override
-                public void onSuccess(Location l) {
-                    // Got last known location. In some rare situations this can be null.
-                    if (l != null) {
-                        // Logic to handle location object
-                        location = l;
-                        a.OnUpdate();
-                    }
-                }
-            });
-    }
-
-    private interface AfterLocationUpdate
-    {
-        void OnUpdate();
-    }
-
-    public void checkPermission()
-    {
-        int checkFineLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
-        int checkCoarseLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION);
-        if (checkFineLocation != PackageManager.PERMISSION_GRANTED || checkCoarseLocation != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted
             Intent intent = new Intent(this, PermissionsActivity.class);
             startActivity(intent);
+            return false;
         }
+        return true;
     }
 
     private class JsonTask extends AsyncTask<String, String, String>
